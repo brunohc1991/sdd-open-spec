@@ -1,0 +1,151 @@
+@baseUrl = http://localhost:4000
+@scenarioVersion = {{$timestamp}}
+@validEmail = maria.{{scenarioVersion}}@example.com
+@validName = Maria Silva
+@validPassword = Strong@123
+
+### Registro valido
+# Esperado: 201 Created, sem corpo
+# @name registerValid
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "name": "{{validName}}",
+  "email": "{{validEmail}}",
+  "password": "{{validPassword}}"
+}
+
+### E-mail duplicado (depende do registro valido acima)
+# Esperado: 409, errors: ["user.email.already.registered"]
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "name": "{{validName}}",
+  "email": "{{validEmail}}",
+  "password": "{{validPassword}}"
+}
+
+### Senha fraca
+# Esperado: 422, errors: ["user.password.strong.password"]
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "name": "{{validName}}",
+  "email": "weak.{{scenarioVersion}}@example.com",
+  "password": "123456"
+}
+
+### Nome sem sobrenome
+# Esperado: 422, errors: ["user.name.person.name"]
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "name": "Maria",
+  "email": "name.{{scenarioVersion}}@example.com",
+  "password": "{{validPassword}}"
+}
+
+### Nome curto demais
+# Esperado: 422, errors incluindo "user.name.min.length"
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "name": "Al",
+  "email": "short.{{scenarioVersion}}@example.com",
+  "password": "{{validPassword}}"
+}
+
+### E-mail com formato invalido
+# Esperado: 422, errors: ["user.email.invalid.email"]
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "name": "{{validName}}",
+  "email": "email-invalido",
+  "password": "{{validPassword}}"
+}
+
+### Campos obrigatorios ausentes
+# Esperado: 422, errors: ["user.name.required", "user.email.required", "user.password.required"]
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{}
+
+### Multiplos campos invalidos
+# Esperado: 422, um codigo por erro: ["user.name.required", "user.email.invalid.email", "user.password.strong.password"]
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "name": "",
+  "email": "x",
+  "password": "1"
+}
+
+### Login valido (depende do registro valido no topo do arquivo)
+# Esperado: 200, corpo { token, user: { id, name, email } } sem password
+# @name loginValid
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{validEmail}}",
+  "password": "{{validPassword}}"
+}
+
+@authToken = {{loginValid.response.body.$.token}}
+
+### Endpoint protegido com o token do login
+# Esperado: 200
+GET {{baseUrl}}/auth
+Authorization: Bearer {{authToken}}
+
+### Endpoint protegido sem token
+# Esperado: 401
+GET {{baseUrl}}/auth
+
+### Login com e-mail inexistente
+# Esperado: 401, errors: ["user.credentials.invalid"]
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "nao.existe.{{scenarioVersion}}@example.com",
+  "password": "{{validPassword}}"
+}
+
+### Login com senha incorreta
+# Esperado: 401, errors: ["user.credentials.invalid"] (mesmo erro do e-mail inexistente)
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{validEmail}}",
+  "password": "Wrong@123"
+}
+
+### Login com e-mail invalido
+# Esperado: 422, errors: ["user.email.invalid.email"]
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "email-invalido",
+  "password": "{{validPassword}}"
+}
+
+### Login com corpo incompleto
+# Esperado: 422, errors: ["user.password.required"]
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{validEmail}}"
+}

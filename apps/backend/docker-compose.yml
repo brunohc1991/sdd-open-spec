@@ -1,0 +1,24 @@
+name: sdd-sdd-open-spec-backend-db
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sdd-sdd-open-spec-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sdd_sdd_open_spec
+      POSTGRES_PASSWORD: docker
+      POSTGRES_DB: sdd_sdd_open_spec_db
+    ports:
+      - '5690:5432'
+    volumes:
+      - sdd-sdd-open-spec-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U sdd_sdd_open_spec']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  sdd-sdd-open-spec-postgres-data:
+    driver: local

@@ -1,0 +1,274 @@
+@baseUrl = http://localhost:4000
+@scenarioVersion = {{$timestamp}}
+@adminEmail = admin.{{scenarioVersion}}@example.com
+@adminPassword = Strong@123
+@productName = Camiseta Azul {{scenarioVersion}}
+@missingId = 00000000-0000-4000-8000-000000000000
+@putCreatedId = 11111111-2222-4333-8444-00{{scenarioVersion}}
+
+### Preparacao: registrar um usuario para autenticar os demais requests
+# Esperado: 201
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "name": "Admin Teste",
+  "email": "{{adminEmail}}",
+  "password": "{{adminPassword}}"
+}
+
+### Preparacao: login para obter o token
+# Esperado: 200, corpo { token, user }
+# @name adminLogin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{adminEmail}}",
+  "password": "{{adminPassword}}"
+}
+
+@token = {{adminLogin.response.body.$.token}}
+
+### Sem token: listar
+# Esperado: 401
+GET {{baseUrl}}/products
+
+### Sem token: criar
+# Esperado: 401
+POST {{baseUrl}}/products
+Content-Type: application/json
+
+{
+  "name": "{{productName}}",
+  "price": 49.9,
+  "status": "active"
+}
+
+### Sem token: excluir
+# Esperado: 401
+DELETE {{baseUrl}}/products/{{missingId}}
+
+### Criar produto completo
+# Esperado: 201, sem corpo
+POST {{baseUrl}}/products
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "{{productName}}",
+  "description": "Algodao 100%",
+  "price": 49.9,
+  "status": "draft",
+  "availableOnline": true,
+  "featured": true,
+  "allowsPreOrder": true
+}
+
+### Obter o id do produto recem-criado (a listagem vem do mais novo para o mais antigo)
+# Esperado: 200, items com 1 produto e total >= 1
+# @name latestProduct
+GET {{baseUrl}}/products?page=1&perPage=1
+Authorization: Bearer {{token}}
+
+@productId = {{latestProduct.response.body.$.items[0].id}}
+
+### Criar produto minimo (defaults: booleanos false, descricao null)
+# Esperado: 201, sem corpo
+POST {{baseUrl}}/products
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Produto Minimo {{scenarioVersion}}",
+  "price": 0,
+  "status": "inactive"
+}
+
+### Listagem paginada
+# Esperado: 200, { items: [{ id, name, description, price, status, availableOnline, featured, allowsPreOrder }], page, perPage, total }
+GET {{baseUrl}}/products?page=1&perPage=10
+Authorization: Bearer {{token}}
+
+### Obter por id
+# Esperado: 200, todos os campos (name, description, price, status e os 3 booleanos)
+GET {{baseUrl}}/products/{{productId}}
+Authorization: Bearer {{token}}
+
+### Obter produto inexistente
+# Esperado: 404, errors: ["product.not_found"]
+GET {{baseUrl}}/products/{{missingId}}
+Authorization: Bearer {{token}}
+
+### Criar com nome invalido (menos de 2 caracteres)
+# Esperado: 422, errors: ["product.name.min.length"]
+POST {{baseUrl}}/products
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "a",
+  "price": 10,
+  "status": "active"
+}
+
+### Criar com preco negativo
+# Esperado: 422, errors: ["product.price.min.value"]
+POST {{baseUrl}}/products
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Produto Invalido",
+  "price": -1,
+  "status": "active"
+}
+
+### Criar com preco de mais de 2 casas decimais
+# Esperado: 422, errors: ["product.price.precision"]
+POST {{baseUrl}}/products
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Produto Invalido",
+  "price": 1.234,
+  "status": "active"
+}
+
+### Criar com status fora do enum
+# Esperado: 422, errors: ["product.status.in"]
+POST {{baseUrl}}/products
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Produto Invalido",
+  "price": 10,
+  "status": "archived"
+}
+
+### Criar com booleano invalido
+# Esperado: 422, errors: ["product.featured.boolean"]
+POST {{baseUrl}}/products
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Produto Invalido",
+  "price": 10,
+  "status": "active",
+  "featured": "sim"
+}
+
+### Criar com corpo vazio
+# Esperado: 422, errors: ["product.name.required", "product.price.required", "product.status.required"]
+POST {{baseUrl}}/products
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{}
+
+### Editar produto (substituicao completa: campos ausentes voltam ao padrao)
+# Esperado: 200, sem corpo
+PUT {{baseUrl}}/products/{{productId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "{{productName}} Editado",
+  "description": null,
+  "price": 99.9,
+  "status": "active",
+  "featured": true
+}
+
+### Obter apos editar
+# Esperado: 200, name editado, description null, price 99.9, status active, availableOnline false, featured true, allowsPreOrder false
+GET {{baseUrl}}/products/{{productId}}
+Authorization: Bearer {{token}}
+
+### Editar com nome invalido
+# Esperado: 422, errors: ["product.name.required"]; o produto nao e alterado
+PUT {{baseUrl}}/products/{{productId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "",
+  "price": 99.9,
+  "status": "active"
+}
+
+### Editar com preco negativo
+# Esperado: 422, errors: ["product.price.min.value"]
+PUT {{baseUrl}}/products/{{productId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "{{productName}} Editado",
+  "price": -5,
+  "status": "active"
+}
+
+### Editar com status fora do enum
+# Esperado: 422, errors: ["product.status.in"]
+PUT {{baseUrl}}/products/{{productId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "{{productName}} Editado",
+  "price": 5,
+  "status": "archived"
+}
+
+### Editar produto inexistente
+# Esperado: 200, sem corpo. NAO e erro: por especificacao o save-product cria o produto com o id recebido quando findById nao o encontra.
+PUT {{baseUrl}}/products/{{putCreatedId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Criado pelo PUT {{scenarioVersion}}",
+  "price": 5,
+  "status": "draft"
+}
+
+### Obter o produto criado pelo PUT
+# Esperado: 200, id igual a {{putCreatedId}}
+GET {{baseUrl}}/products/{{putCreatedId}}
+Authorization: Bearer {{token}}
+
+### Editar com id malformado
+# Esperado: 422, errors: ["id.uuid"]
+PUT {{baseUrl}}/products/nao-e-uuid
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Produto Qualquer",
+  "price": 5,
+  "status": "draft"
+}
+
+### Excluir produto
+# Esperado: 200, sem corpo
+DELETE {{baseUrl}}/products/{{productId}}
+Authorization: Bearer {{token}}
+
+### Excluir novamente (produto inexistente)
+# Esperado: 404, errors: ["product.not_found"]
+DELETE {{baseUrl}}/products/{{productId}}
+Authorization: Bearer {{token}}
+
+### Excluir produto com id inexistente
+# Esperado: 404, errors: ["product.not_found"]
+DELETE {{baseUrl}}/products/{{missingId}}
+Authorization: Bearer {{token}}
+
+### Obter apos excluir
+# Esperado: 404, errors: ["product.not_found"]
+GET {{baseUrl}}/products/{{productId}}
+Authorization: Bearer {{token}}

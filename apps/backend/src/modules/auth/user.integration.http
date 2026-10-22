@@ -1,0 +1,209 @@
+@baseUrl = http://localhost:4000
+@scenarioVersion = {{$timestamp}}
+@adminEmail = admin.{{scenarioVersion}}@example.com
+@adminPassword = Strong@123
+@userEmail = maria.{{scenarioVersion}}@example.com
+@userPassword = Strong@123
+
+### Preparacao: registrar um usuario para autenticar os demais requests
+# Esperado: 201
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "name": "Admin Teste",
+  "email": "{{adminEmail}}",
+  "password": "{{adminPassword}}"
+}
+
+### Preparacao: login para obter o token
+# Esperado: 200, corpo { token, user }
+# @name adminLogin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{adminEmail}}",
+  "password": "{{adminPassword}}"
+}
+
+@token = {{adminLogin.response.body.$.token}}
+
+### Sem token: listar
+# Esperado: 401
+GET {{baseUrl}}/users
+
+### Sem token: criar
+# Esperado: 401
+POST {{baseUrl}}/users
+Content-Type: application/json
+
+{
+  "name": "Maria Silva",
+  "email": "{{userEmail}}",
+  "password": "{{userPassword}}"
+}
+
+### Sem token: excluir
+# Esperado: 401
+DELETE {{baseUrl}}/users/00000000-0000-4000-8000-000000000000
+
+### Criar usuario
+# Esperado: 201, sem corpo
+POST {{baseUrl}}/users
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Maria Silva",
+  "email": "{{userEmail}}",
+  "password": "{{userPassword}}"
+}
+
+### Obter o id do usuario recem-criado (a listagem vem do mais novo para o mais antigo)
+# Esperado: 200, items com 1 usuario { id, name, email } e total >= 2
+# @name latestUser
+GET {{baseUrl}}/users?page=1&perPage=1
+Authorization: Bearer {{token}}
+
+@userId = {{latestUser.response.body.$.items[0].id}}
+
+### Listagem paginada
+# Esperado: 200, { items: [{ id, name, email }], page, perPage, total } sem password
+GET {{baseUrl}}/users?page=1&perPage=10
+Authorization: Bearer {{token}}
+
+### Obter por id
+# Esperado: 200, { id, name, email } sem password
+GET {{baseUrl}}/users/{{userId}}
+Authorization: Bearer {{token}}
+
+### Obter id inexistente
+# Esperado: 404, errors: ["user.not_found"]
+GET {{baseUrl}}/users/00000000-0000-4000-8000-000000000000
+Authorization: Bearer {{token}}
+
+### Criar com e-mail duplicado
+# Esperado: 409, errors: ["user.email.already.registered"]
+POST {{baseUrl}}/users
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Maria Silva",
+  "email": "{{userEmail}}",
+  "password": "{{userPassword}}"
+}
+
+### Criar com senha fraca
+# Esperado: 422, errors: ["user.password.strong.password"]
+POST {{baseUrl}}/users
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Maria Silva",
+  "email": "weak.{{scenarioVersion}}@example.com",
+  "password": "123"
+}
+
+### Criar com corpo vazio
+# Esperado: 422, errors: ["user.name.required", "user.email.required", "user.password.required"]
+POST {{baseUrl}}/users
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{}
+
+### Editar nome sem informar a senha (mantem a senha atual)
+# Esperado: 200, sem corpo
+PUT {{baseUrl}}/users/{{userId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Maria Souza",
+  "email": "{{userEmail}}"
+}
+
+### Editar com senha vazia (mantem a senha atual)
+# Esperado: 200, sem corpo
+PUT {{baseUrl}}/users/{{userId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Maria Souza",
+  "email": "{{userEmail}}",
+  "password": ""
+}
+
+### Login com a senha original (confirma que a senha foi mantida)
+# Esperado: 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "password": "{{userPassword}}"
+}
+
+### Editar com nova senha
+# Esperado: 200, sem corpo
+PUT {{baseUrl}}/users/{{userId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Maria Souza",
+  "email": "{{userEmail}}",
+  "password": "Another@123"
+}
+
+### Login com a nova senha
+# Esperado: 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "password": "Another@123"
+}
+
+### Editar com e-mail de outro usuario
+# Esperado: 409, errors: ["user.email.already.registered"]
+PUT {{baseUrl}}/users/{{userId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Maria Souza",
+  "email": "{{adminEmail}}"
+}
+
+### Editar com senha fraca
+# Esperado: 422, errors: ["user.password.strong.password"]
+PUT {{baseUrl}}/users/{{userId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Maria Souza",
+  "email": "{{userEmail}}",
+  "password": "123"
+}
+
+### Excluir usuario
+# Esperado: 200, sem corpo
+DELETE {{baseUrl}}/users/{{userId}}
+Authorization: Bearer {{token}}
+
+### Excluir novamente
+# Esperado: 404, errors: ["user.not_found"]
+DELETE {{baseUrl}}/users/{{userId}}
+Authorization: Bearer {{token}}
+
+### Obter apos excluir
+# Esperado: 404, errors: ["user.not_found"]
+GET {{baseUrl}}/users/{{userId}}
+Authorization: Bearer {{token}}
